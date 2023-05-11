@@ -184,7 +184,7 @@ xqc_copa_handle_sudden_direction_change(xqc_copa_t *copa,
 }
 
 static void
-xqc_copa_on_ack(void *cong, xqc_sample_t *sampler)
+xqc_copa_on_ack(void *cong, xqc_sample_t *sampler,uint32_t id)//huxin
 {
     xqc_copa_t *copa = (xqc_copa_t*)cong;
     xqc_usec_t  largest_pkt_sent_time = sampler->po_sent_time;

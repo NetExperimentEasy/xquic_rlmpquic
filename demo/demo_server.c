@@ -1155,10 +1155,13 @@ xqc_demo_svr_parse_args(int argc, char *argv[], xqc_demo_svr_args_t *args)
         /* congestion control */
         case 'c':
             printf("option cong_ctl :%s\n", optarg);
-            /* r:reno b:bbr c:cubic */
+            /* r:reno b:bbr c:cubic R:rlcc */
             switch (*optarg) {
             case 'b':
                 args->net_cfg.cc = CC_TYPE_BBR;
+                break;
+	    case 'R'://huxin
+                args->net_cfg.cc = CC_TYPE_RLCC;
                 break;
             case 'c':
                 args->net_cfg.cc = CC_TYPE_CUBIC;
@@ -1282,6 +1285,9 @@ xqc_demo_svr_init_conn_settings(xqc_demo_svr_args_t *args)
     xqc_cong_ctrl_callback_t ccc = {0};
     switch (args->net_cfg.cc) {
     case CC_TYPE_BBR:
+        ccc = xqc_bbr_cb;
+        break;
+    case CC_TYPE_RLCC://huxin
         ccc = xqc_bbr_cb;
         break;
     case CC_TYPE_CUBIC:

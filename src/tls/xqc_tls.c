@@ -71,7 +71,6 @@ typedef struct xqc_tls_s {
 /* quic method callback functions for ssl library */
 SSL_QUIC_METHOD xqc_ssl_quic_method;
 
-
 xqc_bool_t
 xqc_tls_check_session_ticket_timeout(SSL_SESSION *session)
 {
@@ -539,8 +538,7 @@ xqc_tls_process_crypto_data(xqc_tls_t *tls, xqc_encrypt_level_t level,
     SSL *ssl = tls->ssl;
     int ret;
     int err;
-
-    if (SSL_provide_quic_data(ssl, (enum ssl_encryption_level_t)level, crypto_data, data_len)
+    if (SSL_provide_quic_data(ssl, (enum ssl_encryption_level_t)level, crypto_data, data_len)  
         != XQC_SSL_SUCCESS)
     {
         xqc_log(tls->log, XQC_LOG_ERROR, "|SSL_provide_quic_data failed|level:%d|%s|",
@@ -1117,7 +1115,7 @@ xqc_tls_get_selected_alpn(xqc_tls_t *tls, const char **out_alpn,
  */
 
 int 
-xqc_tls_set_read_secret(SSL *ssl, enum ssl_encryption_level_t level,
+xqc_tls_set_read_secret(SSL *ssl, enum ssl_encryption_level_t level,                 
     const SSL_CIPHER *cipher, const uint8_t *secret, size_t secret_len)
 {
     xqc_int_t ret;
@@ -1160,7 +1158,7 @@ xqc_tls_set_read_secret(SSL *ssl, enum ssl_encryption_level_t level,
 
 
 int 
-xqc_tls_set_write_secret(SSL *ssl, enum ssl_encryption_level_t level,
+xqc_tls_set_write_secret(SSL *ssl, enum ssl_encryption_level_t level,  
     const SSL_CIPHER *cipher, const uint8_t *secret, size_t secret_len)
 {
     xqc_int_t ret;
@@ -1202,7 +1200,7 @@ xqc_tls_set_write_secret(SSL *ssl, enum ssl_encryption_level_t level,
 }
 
 int 
-xqc_tls_add_handshake_data(SSL *ssl, enum ssl_encryption_level_t level,
+xqc_tls_add_handshake_data(SSL *ssl, enum ssl_encryption_level_t level, 
     const uint8_t *data, size_t len)
 {
     xqc_tls_t *tls = SSL_get_app_data(ssl);
@@ -1242,7 +1240,7 @@ xqc_tls_send_alert(SSL *ssl, enum ssl_encryption_level_t level, uint8_t alert)
     return XQC_SSL_SUCCESS;
 }
 
-SSL_QUIC_METHOD xqc_ssl_quic_method = {
+SSL_QUIC_METHOD xqc_ssl_quic_method = {     
     .set_read_secret    = xqc_tls_set_read_secret,
     .set_write_secret   = xqc_tls_set_write_secret,
     .add_handshake_data = xqc_tls_add_handshake_data,

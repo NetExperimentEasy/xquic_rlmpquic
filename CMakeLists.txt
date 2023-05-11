@@ -5,52 +5,20 @@ project (xquic)
 
 set (xquic_VERSION_MAJOR 0)
 set (xquic_VERSION_MINOR 1)
-set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-# build type
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
-endif()
+set(CMAKE_C_STANDARD 11 )
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(XQC_BINARY_TYPE SHARED)
 
 # SSL lib type, xquic support babassl and boringssl interfaces
 if(NOT SSL_TYPE)
     set(SSL_TYPE "babassl")
 endif()
 
-if(${SSL_TYPE} MATCHES "babassl")
-    # PATH of ssl
-    if(NOT SSL_PATH)
-        set(SSL_PATH "/usr/local/babassl")
-    endif()
-
-    # ssl lib denpendency
-    if(NOT SSL_LIB_PATH)
-        set(SSL_LIB_PATH
-            ${SSL_PATH}/lib/libssl.a
-            ${SSL_PATH}/lib/libcrypto.a
-        )
-    endif()
-elseif(${SSL_TYPE} MATCHES "boringssl")
-    # PATH of ssl
-    if(NOT SSL_PATH)
-        set(SSL_PATH ${CMAKE_CURRENT_SOURCE_DIR}/third_party/boringssl)
-    endif()
-
-    # ssl lib denpendency
-    if(NOT SSL_LIB_PATH)
-        if(CMAKE_SYSTEM_NAME MATCHES "Windows")
-            add_definitions(-DNOCRYPT=1)
-            set(SSL_LIB_PATH
-                ${SSL_PATH}/build/ssl/${CMAKE_BUILD_TYPE}/ssl.lib
-                ${SSL_PATH}/build/crypto/${CMAKE_BUILD_TYPE}/crypto.lib
-        )
-        else()
-            set(SSL_LIB_PATH
-                ${SSL_PATH}/build/ssl/libssl.a
-                ${SSL_PATH}/build/crypto/libcrypto.a
-            )
-        endif()
-    endif()
+# PATH of ssl
+if(NOT SSL_PATH)
+    set(SSL_PATH "/usr/local/babassl")
 endif()
 
 # ssl include path
@@ -60,73 +28,106 @@ if(NOT SSL_INC_PATH)
     )
 endif()
 
-MESSAGE("SSL_TYPE= ${SSL_TYPE}")
-MESSAGE("SSL_PATH= ${SSL_PATH}")
-MESSAGE("SSL_LIB_PATH= ${SSL_LIB_PATH}")
-MESSAGE("SSL_INC_PATH= ${SSL_INC_PATH}")
-
-# print tls traffic secret in keylog
-if(XQC_PRINT_SECRET)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DXQC_PRINT_SECRET")
+# ssl lib denpendency
+if(NOT SSL_LIB_PATH)
+    set(SSL_LIB_PATH
+        ${SSL_PATH}/lib/libssl.a
+        ${SSL_PATH}/lib/libcrypto.a
+    )
 endif()
 
-if(XQC_COMPAT_DUPLICATE)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DXQC_COMPAT_DUPLICATE")
+set(COMMON_FLAGS            "-Wall -Wno-deprecated  -Wno-unused -Wno-unused-variable -Wno-pointer-sign -Wno-format-security ")
+
+set(COMMON_RELEASE_FLAGS    "-DNDEBUG")
+set(COMMON_MIN_FLAGS        " ${COMMON_RELEASE_FLAGS} -Os -ffunction-sections -fdata-sections -fvisibility=hidden")
+set(COMMON_DEBUG_FLAGS      " -O0")
+if(GCOV)
+    set(COMMON_DEBUG_FLAGS "${COMMON_DEBUG_FksLAGS} -fprofile-arcs -ftest-coverage")
+endif()
+
+if (CMAKE_BUILD_TYPE STREQUAL Release)
+    set(DYNAMIC_COMPILE_FLAGS ${COMMON_RELEASE_FLAGS})
+elseif(CMAKE_BUILD_TYPE STREQUAL Debug)
+    set(DYNAMIC_COMPILE_FLAGS ${COMMON_DEBUG_FLAGS})
+elseif(CMAKE_BUILD_TYPE STREQUAL Minsizerel)
+    set(DYNAMIC_COMPILE_FLAGS ${COMMON_MIN_FLAGS})
+    set(DYMAMIC_LINK_OPTION "-Wl,--gc-sections")
 endif()
 
 
-# print only error log
-if(XQC_ONLY_ERROR_LOG)
-    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -DXQC_ONLY_ERROR_LOG ")
+add_custom_target(xquic_global)
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${COMMON_FLAGS} ${DYNAMIC_COMPILE_FLAGS}")
+
+if (XQC_DISABLE_LOG)
+    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -DXQC_DISABLE_LOG")
 endif()
 
-# enable event log
-if(XQC_ENABLE_EVENT_LOG)
+if (XQC_ONLY_ERROR_LOG)
+    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -DXQC_ONLY_ERROR_LOG")
+endif()
+
+if (XQC_ENABLE_EVENT_LOG)
     set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -DXQC_ENABLE_EVENT_LOG ")
 endif()
 
-# sendmmsg
-if(XQC_SUPPORT_SENDMMSG_BUILD)
-    add_definitions(-DXQC_SUPPORT_SENDMMSG)
+if(ANDROID)
+    set(DYMAMIC_LINK_OPTION 
+        ${DYMAMIC_LINK_OPTION}
+        -lm
+        -llog)
+
+    if(NOT ANDROID_TOOLCHAIN_ROOT)
+        message(FATAL_ERROR  "You Must Define DANDROID_TOOLCHAIN_ROOT")
+    endif()
+
 endif()
 
-#coverity
-if(GCOV STREQUAL "on")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-arcs -ftest-coverage")
-endif()
 
+include(CMakeOptions.txt)
 
+if (XQC_BUILD_OPENSSL)
+    if(${SSL_TYPE} MATCHES "boringssl")
+        add_subdirectory(${SSL_PATH})
+        include_directories(${SSL_PATH}/include)
 
-# C_FLAGS
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O2 -std=gnu11 -Wall -DNDEBUG_PRINT -DNPRINT_MALLOC ")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS} -g -O0 -std=gnu11 -Wall -DNDEBUG_PRINT -DNPRINT_MALLOC -DXQC_DEBUG ")
+        if (BORINGSSL_PREFIX)
+            add_definitions(-DBORINGSSL_PREFIX=${BORINGSSL_PREFIX})
+            add_dependencies(xquic_global boringssl_prefix_symbols)
+            include_directories(${SSL_PATH}/symbol_prefix_include)
+        endif()
 
-if(NOT CMAKE_SYSTEM_NAME MATCHES "Windows")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror -Wno-unused -Wno-pointer-sign -Wno-format-security ")
-    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Werror -Wno-unused -Wno-pointer-sign -Wno-format-security ")
+    else()
+        #set(EXTRA_CONFIGURE_OPENSSL_PARAMS "${EXTRA_CONFIGURE_OPENSSL_PARAMS} ${DYNAMIC_COMPILE_FLAGS} ")
+        #add_subdirectory(external/openssl-cmake)
+    endif()
+
+    set(DYMAMIC_LINK_OPTION 
+            ssl 
+            crypto 
+            ${DYMAMIC_LINK_OPTION}
+        )
+
+elseif(XQC_EXISTS_OPENSSL)
+    if(not XQC_EXISTS_OPENSSL_INCLUDE_DIR or not XQC_EXISTS_OPENSSL_BINARY)
+        message(FATAL_ERROR  "You Must DEFINE XQC_EXISTS_OPENSSL_INCLUDE_DIR and XQC_EXISTS_OPENSSL_BINARY")
+    endif()
+
+    include_directories(XQC_EXISTS_OPENSSL_INCLUDE_DIR)
+    set(DYMAMIC_LINK_OPTION "${XQC_EXISTS_OPENSSL_BINARY} ${DYMAMIC_LINK_OPTION}")
+
 else()
-    add_definitions(-DXQC_SYS_WINDOWS=1)
-endif()
-
-# additional C_FLAGS on mac
-if(PLATFORM STREQUAL "mac32")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
+    message(FATAL_ERROR  "There Must Exists one tls impl")
 endif()
 
 
-# configure file
-configure_file (
-    xqc_configure.h.in
-    xqc_configure.h
-)
+configure_file (xqc_configure.h.in include/xquic/xqc_configure.h  @ONLY)
 
 include_directories(
-    include
-    /usr/local/include
-    "${CMAKE_CURRENT_SOURCE_DIR}"
-    "${CMAKE_CURRENT_BINARY_DIR}/include"
+    include/
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}/include
 )
-
 
 
 # http3/qpack source
@@ -233,12 +234,14 @@ set(
     CONGESTION_CONTROL_SOURCES
     "src/congestion_control/xqc_cubic.c"
     "src/congestion_control/xqc_bbr.c"
+    "src/congestion_control/rlcc.c"
+    "src/congestion_control/xqc_copa.c"
     "src/congestion_control/xqc_window_filter.c"
     "src/congestion_control/xqc_sample.c"
 )
 
-if(XQC_DISABLE_RENO)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DXQC_DISABLE_RENO ")
+if (XQC_DISABLE_RENO)
+    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -DXQC_DISABLE_RENO")
 else()
     set(
         CONGESTION_CONTROL_SOURCES
@@ -247,19 +250,24 @@ else()
     )
 endif()
 
-if(XQC_ENABLE_BBR2)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DXQC_ENABLE_BBR2 ")
+if (XQC_ENABLE_BBR2)
+    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -DXQC_ENABLE_BBR2")
     set(
         CONGESTION_CONTROL_SOURCES
-
         ${CONGESTION_CONTROL_SOURCES}
         "src/congestion_control/xqc_bbr2.c"
-    )
+	# add rlcc here
+        "src/congestion_control/rlcc.c"
+	)
 endif()
 
-# xquic source
-set (
-    XQC_SOURCE 
+if (XQC_NO_SHARED)
+    set(XQC_BINARY_TYPE STATIC)
+endif()
+
+add_library(
+    xquic
+    ${XQC_BINARY_TYPE}
     ${HTTP3_SOURCES}
     ${TRANSPORT_SOURCES}
     ${TLS_SOURCE}
@@ -267,142 +275,30 @@ set (
     ${CONGESTION_CONTROL_SOURCES}
 )
 
+add_dependencies(xquic xquic_global)
 
-
-# target
-add_library(
-    xquic-static
-    STATIC
-    ${XQC_SOURCE}
-)
-
-add_library(
-    xquic
-    SHARED
-    ${XQC_SOURCE}
-)
-
-if(PLATFORM MATCHES "mac")
+if (NOT XQC_NO_SHARED)
     target_link_libraries(
-        xquic
-        "-ldl -Wl,-all_load"
-        ${SSL_LIB_PATH}
-        "-Wl"
-        -lpthread
-    )
-else()
-    target_link_libraries(
-        xquic
-        "-ldl -Wl,--whole-archive -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/scripts/xquic.lds"
-        ${SSL_LIB_PATH}
-        "-Wl,--no-whole-archive"
-        -lpthread
+        xquic 
+        ${DYMAMIC_LINK_OPTION}
+        -pthread
     )
 endif()
 
-
-
-# Strip binary for release builds
-if(CMAKE_BUILD_TYPE STREQUAL MinSizeRel)
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_STRIP} libxquic.so)
-endif()
-
-
-include_directories(${SSL_INC_PATH})
-include_directories(${CMAKE_SOURCE_DIR}/)
-
-
-##### build unittest, test client/server, demo client/server #####
 if (XQC_ENABLE_TESTING)
-    # CUnit TODO: fix test unit on windows
-    find_package(CUnit 2.1)
+    set(CMAKE_MODULE_PATH       "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+    find_package(CUnit REQUIRED)
+    include_directories(${CUNIT_INCLUDE_DIR})
     enable_testing()
-    set(HAVE_CUNIT ${CUNIT_FOUND})
-    if(HAVE_CUNIT)
-        add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
-    endif()
-
     add_subdirectory(tests)
-    include_directories(${CMAKE_CURRENT_BINARY_DIR}/test)
-
-    if(CMAKE_SYSTEM_NAME MATCHES "Windows")
-        # used wingetopt on windows
-        if(NOT GETOPT_INC_PATH)
-            set(GETOPT_INC_PATH
-                ${CMAKE_SOURCE_DIR}/third_party/wingetopt
-            )
-        endif()
-        MESSAGE("GETOPT_INC_PATH= ${GETOPT_INC_PATH}")
-        
-        include_directories(${GETOPT_INC_PATH}/src)        
-        set(GETOPT_SOURCES  "${GETOPT_INC_PATH}/src/getopt.c")
-    endif()
-
-    ### test client/server ###
-    add_executable(test_server tests/test_server.c ${GETOPT_SOURCES})
-    add_executable(test_client tests/test_client.c ${GETOPT_SOURCES})
-
-    ### hq demo client/server ###
-    set(
-        HQ_SOURCES
-        "demo/xqc_hq_ctx.c"
-        "demo/xqc_hq_conn.c"
-        "demo/xqc_hq_request.c"
-    )
-
-    set(
-        DEMO_CLIENT_SOURCES
-        ${HQ_SOURCES}
-        "demo/demo_client.c"
-    )
-
-    set(
-        DEMO_SERVER_SOURCES
-        ${HQ_SOURCES}
-        "demo/demo_server.c"
-    )
-
-    add_executable(demo_server ${DEMO_SERVER_SOURCES} ${GETOPT_SOURCES})
-    add_executable(demo_client ${DEMO_CLIENT_SOURCES} ${GETOPT_SOURCES})
-    if(CMAKE_SYSTEM_NAME  MATCHES "Windows")
-        if (NOT EVENT_LIB_DIR)
-            message("YOU NEED SET -DEVENT_LIB_DIR=your_event_path, eg:-DEVENT_LIB_DIR=D:/project/vcpkg/packages/libevent_x64-windows-static")
-        endif()
-
-        include_directories( ${EVENT_LIB_DIR}/include )
-        link_directories( ${EVENT_LIB_DIR}/lib )
-
-        SET(EVENT_LIB_PATH
-            ${EVENT_LIB_DIR}/lib/event.lib
-            ${EVENT_LIB_DIR}/lib/event_core.lib
-            ${EVENT_LIB_DIR}/lib/event_extra.lib
-        )
-    else()
-        link_directories( /usr/local/lib )
-    endif()
-
-    if(PLATFORM STREQUAL "mac32")
-        target_link_libraries(test_server xquic  -lm ${CMAKE_CURRENT_SOURCE_DIR}/../libevent32/lib/libevent.dylib)
-        target_link_libraries(test_client xquic  -lm ${CMAKE_CURRENT_SOURCE_DIR}/../libevent32/lib/libevent.dylib)
-        target_link_libraries(demo_server xquic  -lm ${CMAKE_CURRENT_SOURCE_DIR}/../libevent32/lib/libevent.dylib)
-        target_link_libraries(demo_client xquic  -lm ${CMAKE_CURRENT_SOURCE_DIR}/../libevent32/lib/libevent.dylib)
-    elseif(PLATFORM STREQUAL "mac")
-        target_link_libraries(test_server xquic -lm -L/usr/local/lib -levent)
-        target_link_libraries(test_client xquic -lm -L/usr/local/lib -levent)
-        target_link_libraries(demo_server xquic -lm -L/usr/local/lib -levent)
-        target_link_libraries(demo_client xquic -lm -L/usr/local/lib -levent)
-    elseif(CMAKE_SYSTEM_NAME  MATCHES "Windows")
-        target_link_libraries(test_server xquic ${EVENT_LIB_PATH} -lm)
-        target_link_libraries(test_client xquic ${EVENT_LIB_PATH} -lm)
-        target_link_libraries(demo_server xquic ${EVENT_LIB_PATH} -lm)
-        target_link_libraries(demo_client xquic ${EVENT_LIB_PATH} -lm)
-    else()
-        target_link_libraries(test_server xquic -levent -lm)
-        target_link_libraries(test_client xquic -levent -lm)
-        target_link_libraries(demo_server xquic -levent -lm)
-        target_link_libraries(demo_client xquic -levent -lm)
-    endif()
-
+    add_subdirectory(tests/unittest)
 endif()
 
+if (XQC_BUILD_SAMPLE)
+    add_subdirectory(third_party/libevent)
+    include_directories(third_party/libevent/include  ${CMAKE_CURRENT_BINARY_DIR}/third_party/libevent/include )
+    add_executable(test_client tests/test_client.c)
+    add_executable(test_server tests/test_server.c)
+    target_link_libraries(test_client xquic event)
+    target_link_libraries(test_server xquic event)
+endif()

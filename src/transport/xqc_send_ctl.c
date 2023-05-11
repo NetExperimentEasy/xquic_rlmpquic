@@ -963,7 +963,7 @@ xqc_send_ctl_on_ack_received(xqc_send_ctl_t *send_ctl, xqc_pn_ctl_t *pn_ctl, xqc
                 }
             }
 
-            send_ctl->ctl_cong_callback->xqc_cong_ctl_on_ack_multiple_pkts(send_ctl->ctl_cong, &send_ctl->sampler);
+            send_ctl->ctl_cong_callback->xqc_cong_ctl_on_ack_multiple_pkts(send_ctl->ctl_cong, &send_ctl->sampler,send_ctl->ctl_path->path_id);//huxin
         }
 
         if (send_ctl->ctl_conn->log->log_level >= XQC_LOG_DEBUG) {
@@ -1017,7 +1017,7 @@ xqc_send_ctl_on_ack_received(xqc_send_ctl_t *send_ctl, xqc_pn_ctl_t *pn_ctl, xqc
         xqc_sample_type_t sample_type = xqc_generate_sample(&send_ctl->sampler, send_ctl, ack_recv_time);
         /* Currently, this is only the case for Copa. */
         if (sample_type != XQC_RATE_SAMPLE_ACK_NOTHING) {
-            send_ctl->ctl_cong_callback->xqc_cong_ctl_on_ack_multiple_pkts(send_ctl->ctl_cong, &send_ctl->sampler);
+            send_ctl->ctl_cong_callback->xqc_cong_ctl_on_ack_multiple_pkts(send_ctl->ctl_cong, &send_ctl->sampler,send_ctl->ctl_path->path_id);//huxin
         }
     }
 

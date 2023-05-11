@@ -21,6 +21,20 @@
 #include <xquic/xquic_typedef.h>
 #include <xquic/xqc_http3.h>
 
+#include "platform.h"  //huxin->
+#ifndef XQC_SYS_WINDOWS
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+#else
+#pragma comment(lib,"ws2_32.lib")
+#pragma comment(lib,"event.lib")
+#pragma comment(lib, "Iphlpapi.lib")
+#include <third_party/wingetopt/src/getopt.h>
+#endif//huxin<-
+
+
 int
 printf_null(const char *format, ...)
 {
@@ -113,7 +127,7 @@ typedef struct user_conn_s {
 
     int                 h3;
     client_ctx_t       *ctx;
-    int                 cur_stream_num; 
+    int                 cur_stream_num;	    
 } user_conn_t;
 
 #define XQC_DEMO_INTERFACE_MAX_LEN 64
@@ -170,6 +184,10 @@ int g_save_body;
 int g_read_body;
 int g_echo_check;
 int g_drop_rate;
+int g_rlcc_flag; // rlcc_flag, use for rlcc         huxin
+char g_redis_url[64];//huxin
+char g_redis_host[64] = "127.0.0.1";//huxin
+int g_redis_port = 6379;//huxin
 int g_spec_url;
 int g_is_get;
 uint64_t g_last_sock_op_time;
@@ -232,6 +250,22 @@ static void xqc_client_epoch_callback(int fd, short what, void *arg);
 
 
 static void xqc_client_timeout_multi_process_callback(int fd, short what, void *arg);
+
+
+#ifdef XQC_SYS_WINDOWS   //huxin->
+static void usleep(unsigned long usec)
+{
+    HANDLE timer;
+    LARGE_INTEGER interval;
+    interval.QuadPart = -(10 * usec);
+
+    timer = CreateWaitableTimer(NULL, TRUE, NULL);
+    SetWaitableTimer(timer, &interval, 0, NULL, NULL, 0);
+    WaitForSingleObject(timer, INFINITE);
+    CloseHandle(timer);
+}
+#endif                 //huxin<-
+
 /*
  CDF file format:
  N (N lines)
@@ -473,16 +507,16 @@ xqc_client_write_socket(const unsigned char *buf, size_t size,
     }
 
     do {
-        errno = 0;
+        errno = 0;                       //?
 
-        g_last_sock_op_time = now();
+        g_last_sock_op_time = now();    //?
 
         if (TEST_DROP) {
             return send_buf_size;
         }
         if (g_test_case == 5) { /* socket send fail */
             g_test_case = -1;
-            errno = EAGAIN;
+            errno = EAGAIN;       //?
             return XQC_SOCKET_EAGAIN;
         }
 
@@ -505,11 +539,11 @@ xqc_client_write_socket(const unsigned char *buf, size_t size,
         res = sendto(fd, send_buf, send_buf_size, 0, peer_addr, peer_addrlen);
         if (res < 0) {
             printf("xqc_client_write_socket err %zd %s\n", res, strerror(errno));
-            if (errno == EAGAIN) {
+            if (errno == EAGAIN) {     //?
                 res = XQC_SOCKET_EAGAIN;
             }
         }
-    } while ((res < 0) && (errno == EINTR));
+    } while ((res < 0) && (errno == EINTR));  //?
 
     return res;
 }
@@ -751,6 +785,7 @@ xqc_client_create_socket(int type,
 {
     int size;
     int fd = -1;
+    int flags; //huxin
 
     /* create fd & set socket option */
     fd = socket(type, SOCK_DGRAM, 0);
@@ -758,6 +793,10 @@ xqc_client_create_socket(int type,
         printf("create socket failed, errno: %d\n", errno);
         return -1;
     }
+
+    #ifdef XQC_SYS_WINDOWS                            // huxin
+    if (ioctlsocket(fd, FIONBIO, &flags) == SOCKET_ERROR) {
+	goto err;
 
     if (fcntl(fd, F_SETFL, O_NONBLOCK) == -1) {
         printf("set socket nonblock failed, errno: %d\n", errno);
@@ -848,6 +887,29 @@ xqc_client_init_addr(user_conn_t *user_conn,
 }
 
 
+#ifndef XQC_SYS_WINDOWS          //huxin->
+static int
+xqc_client_bind_to_interface(int fd, 
+    const char *interface_name)
+{
+    struct ifreq ifr;
+    memset(&ifr, 0x00, sizeof(ifr));
+    strncpy(ifr.ifr_name, interface_name, sizeof(ifr.ifr_name) - 1);
+
+    printf("bind to nic: %s\n", interface_name);
+
+#if (XQC_TEST_MP)
+    if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, (char *)&ifr, sizeof(ifr)) < 0) {
+        printf("bind to nic error: %d, try use sudo\n", get_last_sys_errno());
+        return XQC_ERROR;
+    }
+#endif
+
+    return XQC_OK;
+}
+#endif            //huxin<-
+
+
 static int
 xqc_client_create_path_socket(xqc_user_path_t *path,
     char *path_interface)
@@ -858,6 +920,15 @@ xqc_client_create_path_socket(xqc_user_path_t *path,
         printf("|xqc_client_create_path_socket error|");
         return XQC_ERROR;
     }
+
+#ifndef XQC_SYS_WINDOWS                //huxin->
+    if (path_interface != NULL
+        && xqc_client_bind_to_interface(path->path_fd, path_interface) < 0) 
+    {
+        printf("|xqc_client_bind_to_interface error|");
+        return XQC_ERROR;
+    }
+#endif                                //huxin<-
 
     if (g_test_case == 103 || g_test_case == 104) {
         path->rebinding_path_fd = xqc_client_create_socket((g_ipv6 ? AF_INET6 : AF_INET), 
@@ -931,9 +1002,9 @@ xqc_client_user_conn_multi_process_create(client_ctx_t *ctx, const char *server_
                                      xqc_client_socket_event_callback, user_conn);
     event_add(user_conn->ev_socket, NULL);
 
-    return user_conn;
+    return user_conn;      
 }
-
+//??->
 user_conn_t * 
 xqc_client_user_conn_create(const char *server_addr, int server_port,
     int transport)
@@ -2902,12 +2973,15 @@ int main(int argc, char *argv[]) {
     g_read_body = 0;
     g_echo_check = 0;
     g_drop_rate = 0;
+    g_rlcc_flag = 1234; // rlcc_flag default is 1234      huxin
     g_spec_url = 0;
     g_is_get = 0;
     g_test_case = 0;
     g_ipv6 = 0;
     g_no_crypt = 0;
     g_req_paral = 1;
+    g_copa_ai = 1.0; //huxin
+    g_copa_delta = 0.05;//huxin
 
     char server_addr[64] = TEST_SERVER_ADDR;
     g_server_addr = server_addr;
@@ -2926,7 +3000,25 @@ int main(int argc, char *argv[]) {
     int ch = 0;
     while ((ch = getopt(argc, argv, "a:p:P:n:c:Ct:T1s:w:r:l:Ed:u:H:h:Gx:6NMR:i:V:q:o:fe:F:D:b:B:J:QA")) != -1) {
         switch (ch) {
-        case 'a': /* Server addr. */
+        case 'A':
+            g_copa_ai = atof(optarg);
+            if (g_copa_ai < 1.0) {
+                printf("option g_copa_ai must be greater than 1.0\n");
+                exit(0);
+            } else {
+                printf("option g_copa_ai: %.4lf\n", g_copa_ai);
+            }
+            break;
+        case 'D':
+            g_copa_delta = atof(optarg);
+            if (g_copa_delta <= 0 || g_copa_delta > 0.5) {
+                printf("option g_copa_delta must be in (0, 0.5]\n");
+                exit(0);
+            } else {
+                printf("option g_copa_delta: %.4lf\n", g_copa_delta);
+            }
+            break;
+	case 'a': /* Server addr. */
             printf("option addr :%s\n", optarg);
             snprintf(server_addr, sizeof(server_addr), optarg);
             break;
