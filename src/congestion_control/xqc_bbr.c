@@ -852,7 +852,7 @@ xqc_bbr_update_recovery_mode(void *cong_ctl, xqc_sample_t *sampler)
 }
 
 static void 
-xqc_bbr_on_ack(void *cong_ctl, xqc_sample_t *sampler)
+xqc_bbr_on_ack(void *cong_ctl, xqc_sample_t *sampler,uint32_t id)
 {
     xqc_bbr_t *bbr = (xqc_bbr_t *)(cong_ctl);
 #if XQC_BBR_RTTVAR_COMPENSATION_ENABLED

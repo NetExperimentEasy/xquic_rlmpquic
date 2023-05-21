@@ -1405,7 +1405,7 @@ xqc_bbr2_bound_cwnd_for_inflight_model(xqc_bbr2_t *bbr2)
 }
 
 static void 
-xqc_bbr2_on_ack(void *cong_ctl, xqc_sample_t *sampler)
+xqc_bbr2_on_ack(void *cong_ctl, xqc_sample_t *sampler,uint32_t id)
 {
     xqc_bbr2_t *bbr2 = (xqc_bbr2_t *)(cong_ctl);
     xqc_bbr2_context_t bbr2_ctx = {0};

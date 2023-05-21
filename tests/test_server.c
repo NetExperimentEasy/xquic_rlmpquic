@@ -17,19 +17,6 @@
 #include <xquic/xqc_http3.h>
 #include <time.h>
 
-#include "platform.h"//huxin->
-
-#ifndef XQC_SYS_WINDOWS
-#include <unistd.h>
-#include <sys/wait.h>
-#else
-#include <third_party/wingetopt/src/getopt.h>
-#pragma comment(lib,"ws2_32.lib")
-#pragma comment(lib,"event.lib")
-#pragma comment(lib, "Iphlpapi.lib")
-#endif               //huxin<-
-
-
 #define XQC_FIRST_OCTET 1
 int
 printf_null(const char *format, ...)
@@ -112,10 +99,6 @@ int g_save_body;
 int g_read_body;
 int g_spec_url;
 int g_test_case;
-int g_rlcc_flag; // rlcc_flag   huxin
-char g_redis_url[64];//huxin
-char g_redis_host[64] = "127.0.0.1";//huxin
-int g_redis_port = 6379;//huxin
 int g_ipv6;
 int g_batch=0;
 int g_lb_cid_encryption_on = 0;
@@ -1445,8 +1428,7 @@ int main(int argc, char *argv[]) {
     g_copa_delta = 0.05;//huxin
 
     char server_addr[64] = TEST_ADDR;
-    int server_port = TEST_PORT;        
-    //int server_port = TEST_SERVER_PORT;
+    int server_port = TEST_PORT;
     char c_cong_ctl = 'b';
     char c_log_level = 'd';
     int c_cong_plus = 0;
@@ -1457,9 +1439,9 @@ int main(int argc, char *argv[]) {
     srand(0);
 
     int ch = 0;
-    while ((ch = getopt(argc, argv, "a:p:ec:Cs:w:r:l:u:x:6bS:MR:o:EK:mLQf:1:")) != -1) {
+    while ((ch = getopt(argc, argv, "f:1:a:p:ec:Cs:w:r:l:u:x:6bS:MR:o:EK:mLQ")) != -1) {
         switch (ch) {
-	case 'a':
+        case 'a':
             printf("option addr :%s\n", optarg);
             snprintf(server_addr, sizeof(server_addr), optarg);
             g_spec_local_addr = 1;
@@ -1577,8 +1559,7 @@ int main(int argc, char *argv[]) {
             printf("option multipath backup path standby :%s\n", "on");
             g_mp_backup_mode = 1;
             break;
-
-	case 'f':                    //huxin
+        case 'f':                    //huxin
             printf("option rlcc_flag :%s\n", optarg);
             g_rlcc_flag = atoi(optarg);
             break;
@@ -1590,7 +1571,6 @@ int main(int argc, char *argv[]) {
             g_redis_port = atoi(port);
             printf("host is %s, port is %d\n", g_redis_host, g_redis_port);
             break;
-
 
         default:
             printf("other option :%c\n", ch);
@@ -1665,16 +1645,13 @@ int main(int argc, char *argv[]) {
     else if (c_cong_ctl == 'c') {
         cong_ctrl = xqc_cubic_cb;
     }
-    else if (c_cong_ctl == 'A') { //huxin
-        cong_ctrl = xqc_copa_cb;
-    }
+#ifdef XQC_ENABLE_BBR2
+    else if (c_cong_ctl == 'B') {
+        cong_ctrl = xqc_bbr2_cb;
     /* add rlcc here */           //huxin
     else if (c_cong_ctl == '1') {
         cong_ctrl = xqc_rlcc_cb;
     }
-#ifdef XQC_ENABLE_BBR2
-    else if (c_cong_ctl == 'B') {
-        cong_ctrl = xqc_bbr2_cb;
 #if XQC_BBR2_PLUS_ENABLED
         if (c_cong_plus) {
             cong_flags |= XQC_BBR2_FLAG_RTTVAR_COMPENSATION;
@@ -1696,9 +1673,6 @@ int main(int argc, char *argv[]) {
             .customize_on = 1, 
             .init_cwnd = 32, 
             .cc_optimization_flags = cong_flags,
-	    .copa_delta_ai_unit = g_copa_ai,
-            .copa_delta_base = g_copa_delta,
-            .rlcc_path_flag = g_rlcc_flag, .redis_host = g_redis_host, .redis_port = g_redis_port
         },
         .enable_multipath = g_enable_multipath,
         .spurious_loss_detect_on = 0,
@@ -1839,8 +1813,7 @@ int main(int argc, char *argv[]) {
     ctx.quic_lb_ctx.conf_id = 0;
     ctx.quic_lb_ctx.cid_len = XQC_MAX_CID_LEN;
 
-    //ctx.fd = xqc_server_create_socket(server_addr, server_port);
-    ctx.fd = xqc_server_create_socket(TEST_ADDR, server_port);
+    ctx.fd = xqc_server_create_socket(server_addr, server_port);
     if (ctx.fd < 0) {
         printf("xqc_create_socket error\n");
         return 0;

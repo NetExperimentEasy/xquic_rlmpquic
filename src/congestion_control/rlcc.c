@@ -1,6 +1,4 @@
-/**
- * @copyright Copyright (c) 2022, jinyaoliu
- */
+//huxin
 
 #include "src/congestion_control/rlcc.h"
 #include <math.h>
@@ -40,7 +38,7 @@ static int down_actions_list[8] = {1,3,5,9,15,21,33,51};
 
 /* see xqc_pacing.c xqc_pacing_rate_calc */
 static void
-xqc_rlcc_calc_pacing_rate_by_cwnd(xqc_rlcc_t *rlcc)
+xqc_rlcc_calc_pacing_rate_by_cwnd(xqc_rlcc_t *rlcc)     //根据cwnd计算发送速率
 {	
 	xqc_usec_t srtt = rlcc->srtt;
     if (srtt == 0) {
@@ -106,6 +104,8 @@ push_state(redisContext *conn, u_int32_t key, char *value)
 	return;
 }
 
+//解析 Redis 命令，并更新 RLCC 控制器的状态
+//RLCC 控制器通过不断地监测网络状态和数据包的丢失情况，动态调整拥塞窗口和发送速率，以保证数据流的稳定和可靠传输。
 /* get action from redis */
 static void
 get_result_from_reply(redisReply *reply, xqc_rlcc_t *rlcc)
@@ -113,13 +113,12 @@ get_result_from_reply(redisReply *reply, xqc_rlcc_t *rlcc)
 	float cwnd_rate;
 	float pacing_rate_rate;
 	int cwnd_value;
-
 	int plan = 3; 
 	/* TODO: use *function to replace plan */
-
-	// plan 1 : control by multiply rate; 
-	// plan 2 : control by add rate; owl action space
-	// plan 3 : satcc action space
+    // 3种不同的RLCC调整方案
+	// plan 1 : control by multiply rate; 乘法调整速率
+	// plan 2 : control by add rate; owl action space 加法调整速率
+	// plan 3 : satcc action space  satcc调整速率
 
 	if (reply->type == REDIS_REPLY_ARRAY)
 	{
@@ -251,6 +250,7 @@ get_result_from_reply(redisReply *reply, xqc_rlcc_t *rlcc)
 	return;
 }
 
+//在redis中订阅指定频道
 static void
 subscribe(redisContext *conn, xqc_rlcc_t *rlcc)
 {
@@ -271,6 +271,7 @@ subscribe(redisContext *conn, xqc_rlcc_t *rlcc)
 }
 
 /* thread function */
+//从redis中实时获取对应频道的数据
 static void *
 get_action(void *arg)
 {
@@ -338,7 +339,7 @@ xqc_rlcc_init(void *cong_ctl, xqc_send_ctl_t *ctl_ctx, xqc_cc_params_t cc_params
 
 	if (rlcc->rlcc_path_flag)
 	{
-		push_state(rlcc->redis_conn_publisher, rlcc->rlcc_path_flag, "state:init");
+		(rlcc->redis_conn_publisher, rlcc->rlcc_path_flag, "state:init");
 		subscribe(rlcc->redis_conn_listener, rlcc);
 	}
 	else
@@ -399,22 +400,6 @@ xqc_rlcc_on_ack(void *cong_ctl, xqc_sample_t *sampler)
 	 *  total_sent  ctl->ctl_bytes_send
 	 */
 
-	// printf("debug:pd:%ld, i:%ld, d:%d, a:%d, bi:%d, pi:%d, r:%ld, ial:%d, l:%d, ta:%ld, s:%ld, dr:%d, pl:%d, lp:%d\n",
-	// 	   sampler->prior_delivered,
-	// 	   sampler->interval,
-	// 	   sampler->delivered,
-	// 	   sampler->acked,
-	// 	   sampler->bytes_inflight,
-	// 	   sampler->prior_inflight,
-	// 	   sampler->rtt,
-	// 	   sampler->is_app_limited,
-	// 	   sampler->loss,
-	// 	   sampler->total_acked,
-	// 	   sampler->srtt,
-	// 	   sampler->delivery_rate,
-	// 	   sampler->prior_lost,
-	// 	   sampler->lost_pkts);
-
 	xqc_usec_t current_time = xqc_monotonic_timestamp();
 
 	probe_minrtt(rlcc, sampler);
@@ -458,7 +443,7 @@ xqc_rlcc_on_ack(void *cong_ctl, xqc_sample_t *sampler)
 						sampler->delivery_rate,
 						rlcc->throughput, // delivery_rate 与 throughput 不作为状态，作为单独的奖励计算使用
 						sent_interval);
-				push_state(rlcc->redis_conn_publisher, rlcc->rlcc_path_flag, value);
+				(rlcc->redis_conn_publisher, rlcc->rlcc_path_flag, value);
 				pthread_mutex_lock(&mutex_lock);
 				// send signal
 				pthread_cond_signal(&cond);
@@ -546,7 +531,7 @@ xqc_rlcc_on_ack(void *cong_ctl, xqc_sample_t *sampler)
 						rlcc->delivery_rate,     // notice:此处是采样周期内平滑后的delivery_rate
 						rlcc->throughput,
 						sent_interval);
-				push_state(rlcc->redis_conn_publisher, rlcc->rlcc_path_flag, value);
+				(rlcc->redis_conn_publisher, rlcc->rlcc_path_flag, value);
 				pthread_mutex_lock(&mutex_lock);
 				// send signal
 				pthread_cond_signal(&cond);
@@ -561,7 +546,7 @@ xqc_rlcc_on_ack(void *cong_ctl, xqc_sample_t *sampler)
 	}
 
 	if (plan == 3)
-	{
+	{   // satcc算法
 		// plan3. double rtt sample method
 		// xqc_usec_t time_interval;
 
@@ -634,7 +619,7 @@ xqc_rlcc_on_ack(void *cong_ctl, xqc_sample_t *sampler)
 						rlcc->delivery_rate,     // notice:此处是采样周期内平滑后的delivery_rate
 						rlcc->throughput,
 						sent_interval);
-				push_state(rlcc->redis_conn_publisher, rlcc->rlcc_path_flag, value);
+				(rlcc->redis_conn_publisher, rlcc->rlcc_path_flag, value);
 				pthread_mutex_lock(&mutex_lock);
 				// send signal
 				pthread_cond_signal(&cond);
